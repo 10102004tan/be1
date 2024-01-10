@@ -1,0 +1,433 @@
+Sườn chạy
+
++ Thiết lập cấu trúc , chia ui và đặt tên name cho các input, đối với form thêm thuộc
+
+tính enctype="multipart/form-data"
+
+Thêm methods getAllCategories()
+
+Thêm required cho input
+
+Delete thì là form post
+
+Thêm requi class cho các file php sau khi tạo
+
++ Làm thêm sản phẩm
+
++ File được lưu ở : C->wamp64->www
+
++ Hiển thị danh sách
+
++ Phân trang
+
++ Xóa
+
++ Tìm (Copy index thay data và total và link paga)
+
++ Sửa
+
+*Chú ý : Nếu 1-n -> nên có category_name inner join bảng để hiển thị
+
+//requie
+
+require_once './config/database.php';
+
+spl_autoload_register(function ($className) {
+
+require_once "./app/models/$className.php";
+
+});
+
+//Model
+
+public function __construct()
+
+{
+
+if (!self::$connection){
+
+self::$connection = new mysqli(DB_HOST, DB_USER, DB_PASS, DB_NAME);
+
+self::$connection->set_charset('utf8mb4'); }
+
+}
+
+public function select($sql) {
+
+$items = [];
+
+$sql->execute();
+
+$items = $sql->get_result()->fetch_all(MYSQLI_ASSOC);
+
+return $items;
+
+}
+
+//add
+
+$categoryModel = new Category();
+
+$productModel = new Product();
+
+$categories_data = $categoryModel->getAllCategories();
+
+$conditions = (isset($_POST['name']) && isset($_POST['price']) &&
+
+isset($_POST['category_id']) && isset($_POST['desc']) && isset($_FILES['image']));
+
+$name;
+
+$desc;
+
+$categoryId;
+
+$price;
+
+$imageName;
+
+if ($conditions)
+
+{
+
+$name = $_POST['name'];
+
+$price = $_POST['price'];
+
+$desc = $_POST['desc'];
+
+$categoryId = $_POST['category_id'];
+
+$image = $_FILES['image'];
+
+$imageExtension = strtolower(pathinfo($image['name'], PATHINFO_EXTENSION));
+
+$imageName = hash('sha256', file_get_contents($image['tmp_name'])) . '_' . time() .
+
+".$imageExtension";
+
+if ($productModel->store($name,$price,$desc,$categoryId,$imageName)){
+
+rename($image['tmp_name'],'./public/storage/'.$imageName);
+
+echo "<script> alert('Them thanh cong'); window.location='index.php'</script>";
+
+}
+
+else{
+
+echo "<srcipt> alert('Them that bai'); window.location='index.php'</srcipt>";
+
+}
+
+}
+
+//show
+
+$productModel = new Product();
+
+$page = 1;
+
+if (isset($_GET['page'])){
+
+$page = $_GET['page'];
+
+}
+
+$perPage = 3;
+
+$products_data = $productModel->getAllProductsLimit(($page - 1) * $perPage, $perPage);
+
+$total = $productModel->getTotalAllProducts();
+
+$endPage = ceil($total / $perPage);
+
+//demo paga
+
+<li class="page-item"><a class="page-link"
+
+href="index.php?page=<?=($page == $endPage) ? $endPage : ($page + 1) ?>">Next</a>
+
+</li>
+
+//delete
+
+$productModel = new Product();
+
+if (isset($_POST['id'])){
+
+$id = $_POST['id'];
+
+$productModel->destroy($id);
+
+echo "<script> window.location='index.php'</script>";
+
+}
+//update (Nhớ sửa action)
+
+Tương tự như add nhưng sẽ khác ở mục image, nhớ đưa các thông tin vào input (id ở
+
+dạng hidden)từ product_data với cách lấy id là $id = $_REQUEST['id'];
+
+$imageName = $product_data['image'];
+
+if (!empty($_FILES['image']['name'])){
+
+unlink('./public/storage/'.$imageName);
+
+$image = $_FILES['image'];
+
+$imageExtension = strtolower(pathinfo($image['name'], PATHINFO_EXTENSION));
+
+$imageName = hash('sha256', file_get_contents($image['tmp_name'])) . '_' . time()
+
+".$imageExtension";
+
+rename($image['tmp_name'],'./public/storage/'.$imageName);
+
+}
+
+if ($productModel->update($id,$name,$price,$desc,$categoryId,$imageName)){
+
+echo "<script> alert('Cap nhat thanh cong'); window.location='index.php'</script>";
+
+}
+
+else{
+
+echo "<srcipt> alert('Cap nhat that bai'); window.location='index.php'</srcipt>";
+
+}
+
+Thêm checked cho input category :
+
+<?=($product_data['category_id'] == $category_data['id']) ? "checked" : ""?>
+
+//
+
+$sql = parent::$conn->prepare("SELECT * FROM `categories`");
+
+return parent::select($sql);
+
+
+//insert nhiều category
+
+public function store($name,$price,$desc,$categoriesId,$imageName){
+
+$sql = parent::$conn->prepare("INSERT INTO `products`( `name`, `price`, `description`,
+
+`image`) VALUES (?,?,?,?)");
+
+$sql->bind_param('siss',$name,$price,$desc,$imageName);
+
+$sql->execute();
+
+$insertedProduct = parent::$conn->insert_id;
+
+$insertedValues = [];
+
+foreach ($categoriesId as $categoryId) {
+
+array_push($insertedValues,$categoryId,$insertedProduct);
+
+}
+
+$values = str_repeat("(?,?) ,",count($categoriesId) - 1) . ("(?,?)");
+
+$type = str_repeat("ii",count($categoriesId));
+
+$sql = parent::$conn->prepare("INSERT INTO category_product VALUES $values");
+
+$sql->bind_param($type,...$insertedValues);
+
+return $sql->execute();
+
+}
+
+//show
+
+public function getAllProductsLimit($page,$perPage){
+
+$sql = parent::$conn->prepare("SELECT DISTINCT products.*,
+
+(select GROUP_CONCAT(categories.id,'-', categories.name)
+
+from category_product inner join categories on id = category_id
+
+where product_id = products.id) as 'category_name'
+
+FROM `products` LIMIT ?,?");
+
+$sql->bind_param('ii',$page,$perPage);
+
+return parent::select($sql);
+
+}
+
+//edit -> getProductById không lấy name , tương tự từ show
+
+$categoriesChecked;
+
+if (isset($_REQUEST['id'])){
+
+$id = $_REQUEST['id'];
+
+$product_data = $productModel->getProductById($id);
+
+$categoriesChecked = explode(',',$product_data['category_name']);
+
+}
+
+-> ở input
+
+<?php foreach($categories_data as $category_data) : ?>
+
+<div class="category_item">
+
+<input <?=(in_array($category_data['id'],$categoriesChecked)) ? "checked" : ""?>
+
+type="checkbox" class="form-check-input" value="<?=$category_data['id']?>"
+
+name="categories_id[]">
+
+<label for="" class="form-check-label"><?=$category_data['name']?></label>
+
+</div>
+
+<?php endforeach ?>
+//update
+
+public function update($id,$name,$price,$desc,$categoriesId,$imageName){
+
+$sql = parent::$conn->prepare("UPDATE `products` SET
+
+`name`=?,`price`=?,`description`=?,`image`=? WHERE id = ?");
+
+$sql->bind_param('sissi',$name,$price,$desc,$imageName,$id);
+
+$sql->execute();
+
+$updateValues = [];
+
+foreach ($categoriesId as $categoryId) {
+
+array_push($updateValues,$categoryId,$id);
+
+}
+
+$values = str_repeat("(?,?) ,",count($categoriesId) - 1) . ("(?,?)");
+
+$type =str_repeat("ii",count($categoriesId)) ;
+
+$sql = parent::$conn->prepare("delete FROM `category_product` WHERE
+
+product_id=? ");
+
+$sql->bind_param("i",$id);
+
+$sql->execute();
+
+$sql = parent::$conn->prepare("insert INTO category_product values $values");
+
+$sql->bind_param($type,...$updateValues);
+
+return $sql->execute();
+
+}
+
+Chi tiết :
+
+edit
+
+<?php
+
+require_once './config/database.php';
+
+spl_autoload_register(function ($className) {
+
+require_once "./app/models/$className.php";
+
+});
+
+$categoryModel = new Category();
+
+$productModel = new Product();
+
+$categories_data = $categoryModel->getAllCategories();
+
+$id;
+
+$product_data;
+
+$categoriesChecked;
+
+if (isset($_REQUEST['id'])){
+
+$id = $_REQUEST['id'];
+
+$product_data = $productModel->getProductById($id);
+
+$categoriesChecked = explode(',',$product_data['category_name']);
+
+}
+
+$conditions = (isset($_POST['name']) && isset($_POST['price']) &&
+
+isset($_POST['categories_id']) && isset($_POST['desc']));
+
+$name;
+
+$desc;
+
+$categoriesId;
+
+$price;
+
+$imageName;
+
+if ($conditions)
+
+{
+
+$name = $_POST['name'];
+
+$price = $_POST['price'];
+
+$desc = $_POST['desc'];
+
+$categoriesId = $_POST['categories_id'];
+
+$imageName = $product_data['image'];
+
+if (!empty($_FILES['image']['name'])){
+
+unlink('./public/storage/'.$imageName);
+
+$image = $_FILES['image'];
+
+$imageExtension = strtolower(pathinfo($image['name'], PATHINFO_EXTENSION));
+
+$imageName = hash('sha256', file_get_contents($image['tmp_name'])) . '_' . time() .
+
+".$imageExtension";
+
+rename($image['tmp_name'],'./public/storage/'.$imageName);
+
+}
+
+if ($productModel->update($id,$name,$price,$desc,$categoriesId,$imageName)){
+
+echo "<script> alert('Cap nhat thanh cong'); window.location='index.php'</script>";
+
+}
+
+else{
+
+echo "<srcipt> alert('Cap nhat that bai'); window.location='index.php'</srcipt>";
+
+}
+
+}
+
+?>
+
